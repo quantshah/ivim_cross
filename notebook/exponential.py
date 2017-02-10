@@ -8,6 +8,7 @@ import dipy.core.gradients as dpg
 from dipy.reconst.base import ReconstModel
 from dipy.reconst.multi_voxel import multi_voxel_fit
 
+
 def exponential_prediction(params, gtab, S0 = 1.):
     """
     Prediction using exponential decay model.
