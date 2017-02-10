@@ -69,8 +69,7 @@ def leave_one_cross(model, data_slice, gtab):
         # We try to predict only the left out measurement
         predict_gtab = dpg.gradient_table(np.array([gtab.bvals[left_out]]), 
                                           np.array([gtab.bvecs[left_out]]))
-        left_predictions = fit.predict(predict_gtab)
-        
+        left_predictions = fit.predict(predict_gtab)        
         predictions[..., left_out] = left_predictions[..., -1]
     return (predictions)
 
