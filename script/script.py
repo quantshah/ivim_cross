@@ -89,4 +89,4 @@ exp_img = nib.Nifti1Image(predicted_exp, np.eye(4))
 ivim_img = nib.Nifti1Image(predicted_ivim, np.eye(4))
 
 nib.save(exp_img, "outputs/exponential.nii.gz")
-nib.save(ivim_img, "outputs/exponential.nii.gz")
+nib.save(ivim_img, "outputs/ivim.nii.gz")
