@@ -1,5 +1,5 @@
 import numpy as np
-import csv
+import nibabel as nib
 
 from dipy.reconst.ivim import IvimModel
 from dipy.data.fetcher import read_ivim
@@ -8,7 +8,6 @@ from dipy.reconst.base import ReconstModel
 from dipy.reconst.multi_voxel import multi_voxel_fit
 
 from exponential import ExponentialModel
-
 
 def nmse(data, prediction):
     """
@@ -51,13 +50,12 @@ def leave_one_cross(model, data_slice, gtab):
     predictions = np.zeros([data_slice.shape[0], 
                             data_slice.shape[1],
                             data_slice.shape[2],
-                            data_slice.shape[3] - 1])
+                            data_slice.shape[3]])
 
-    # Normalized mean sq error
-    NMSE = []
     # Note that we are not predicting S0, because we always need S0 to fit the model
+    predictions[..., 0] = data_slice[..., 0]
 
-    for left_out in range(1, data_slice.shape[-1]-1):
+    for left_out in range(1, data_slice.shape[-1]):
         # These are the b-values/b-vectors with one of them left out:
         left_out_bvals = np.concatenate([gtab.bvals[:left_out], gtab.bvals[left_out+1:]])
         left_out_bvecs = np.concatenate([gtab.bvecs[:left_out], gtab.bvecs[left_out+1:]])
@@ -72,65 +70,24 @@ def leave_one_cross(model, data_slice, gtab):
         predict_gtab = dpg.gradient_table(np.array([gtab.bvals[left_out]]), 
                                           np.array([gtab.bvecs[left_out]]))
         left_predictions = fit.predict(predict_gtab)
-        predictions[..., left_out] = left_predictions[..., 0]
-        err = nmse(left_predictions.squeeze().ravel(), data_slice[..., left_out].squeeze().ravel())
-        NMSE += [err]
-
-    return (predictions, np.array(NMSE))
+        
+        predictions[..., left_out] = left_predictions[..., -1]
+    return (predictions)
 
 img, gtab = read_ivim()
 data = img.get_data()
 
-# max values for each dim
-x, y, z, bval = data.shape
+x1, y1, z1 = 90, 90, 30
+x2, y2, z2 = 95, 95, 35
 
-# size of volume chunk for each iteration
-vol_size = 2
+predicted_ivim = np.zeros_like(data)
+predicted_ivim[x1:x2, y1:y2, z1:z2, ...] = leave_one_cross(IvimModel, data[x1:x2, y1:y2, z1:z2, :], gtab)
 
-# Max iterations to run
-max_iters = 3
-count = 0
+predicted_exp = np.zeros_like(data)
+predicted_exp[x1:x2, y1:y2, z1:z2, ...] = leave_one_cross(ExponentialModel, data[x1:x2, y1:y2, z1:z2, :], gtab)
 
-# volume id of last data point
-volids = []
+exp_img = nib.Nifti1Image(predicted_exp, np.eye(4))
+ivim_img = nib.Nifti1Image(predicted_ivim, np.eye(4))
 
-with open("outputs/ivim.csv", "r") as f: 
-    reader = csv.reader(f)
-    for row in reader:
-        volids += [row[0:3]]
-
-# Initial volume ids
-x1, y1, z1 = [int(x) for x in volids[-1]]
-
-while count < max_iters:
-    x2, y2, z2 = x1 + vol_size, y1 + vol_size, z1+ vol_size
-
-    data_slice = data[x1:x2, y1:y2, z1:z2, :]
-    ivim_predictions, ivim_nmse = leave_one_cross(IvimModel, data_slice, gtab)
-
-    # output row. Add the volume index
-    out = [x1, y1, z1]
-    out.append(ivim_nmse.mean())
-    
-    # We can chose to record predicted val for each bval
-    # nmse_flat = ivim_nmse.ravel()
-    # for x in nmse_flat:
-    #     out.append(x)
-
-    with open('outputs/ivim'+'.csv', 'a') as f:
-        writer = csv.writer(f)
-        writer.writerow(out)
-    
-    # Exponential decay model
-    exp_predictions, exp_nmse = leave_one_cross(ExponentialModel, data_slice, gtab)
-    out = [x1, y1, z1]
-    out.append(exp_nmse.mean())
-
-    with open('outputs/exp'+'.csv', 'a') as f:
-        writer = csv.writer(f)
-        writer.writerow(out)
-    count += 1
-    
-    x1 += vol_size
-    y1 += vol_size
-    z1 += vol_size
+nib.save(exp_img, "outputs/exponential.nii.gz")
+nib.save(ivim_img, "outputs/exponential.nii.gz")
